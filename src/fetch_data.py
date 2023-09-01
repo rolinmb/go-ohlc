@@ -5,25 +5,6 @@ import datetime as dt
 import pandas as pd
 import urllib.request, json
 
-def getQuoteAV(ticker):
-    url = 'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s'%(ticker, AV_KEY)
-    with urllib.request.urlopen(url) as source:
-        try: # Attempt to read JSON, if no JSON then maybe 404 error or other type of error
-            data = json.loads(source.read().decode())
-        except Exception as e:
-            exit(f'getQuoteAV(): ! ERROR {e}: Couldn''t fetch the AlphaVantage API URL => calling sys.exit()')
-        try:
-            return data['Global Quote']['05. price']
-        except KeyError:
-            exit(f'getQuoteAV():! KEY ERROR: {ticker} is not valid to query on AlphaVantage => calling sys.exit()')
-
-def validateTicker(ticker):
-    if not ticker.isalpha() or len(ticker) > 5:
-        exit('validateTicker():! INPUT ERROR: Non-alphabetical characters/too many characters entered for 1st argument ''ticker'' => calling sys.exit()')
-    q = getQuoteAV(ticker)
-    if q is None:
-        exit(f'validateTicker()! TYPE ERROR: {ticker} likely invalid => calling sys.exit()')
-
 def buildSeriesDataFrame(ticker, data):
     # print(f'JSON Snapshot before building DataFrame:\n{data}\n')
     df = pd.DataFrame(columns=['Ticker','Date','Open','High','Low','Close', 'Volume'])
@@ -64,7 +45,6 @@ if __name__ == '__main__':
     t_start = time.time()
     try:
         ticker = argv[1].strip().upper()
-        # validateTicker(ticker)
     except IndexError:
         exit('\t! INDEX ERROR: No 1st argument ''ticker'' entered => calling sys.exit()')
     fetchSeriesData(ticker, logging=True)
