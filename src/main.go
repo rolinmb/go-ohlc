@@ -21,7 +21,11 @@ const (
 
 type SeriesData struct {
     Date string
+	Open float64
+	High float64
+	Low float64
     Close float64
+	DayRange float64
 	PercentReturn float64
 	PointDelta float64
 	Signal string
@@ -109,7 +113,11 @@ func main() {
 		}
         entry := SeriesData{
             Date: records[i][1],
+			Open: parseFloat(records[i][2]),
+			High: parseFloat(records[i][3]),
+			Low: parseFloat(records[i][4]),
             Close: closePrice,
+			DayRange: math.Abs(parseFloat(records[i][3]) - parseFloat(records[i][4])),
 			PercentReturn: percent,
 			PointDelta: change,
 			Signal: signal, 
@@ -118,7 +126,7 @@ func main() {
     }
     /* ML Feature Detection; finding desired correct output data (the buy/sell signals) to train our model on */
     for i := 0; i < len(data); i++ {
-		fmt.Printf("%s signal at date: %s\n", data[i].Signal, data[i].Date)
+		fmt.Printf("%s signal at date: %s -> OHLC: (%f, %f, %f, %f) -> Day Range: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange)
     }
 	/* Initializing the NN */
 	
