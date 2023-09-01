@@ -8,6 +8,7 @@ import (
     "strconv"
 	"math"
 	"math/rand"
+	"time"
 )
 
 const (
@@ -71,8 +72,8 @@ func sigmoidDerivative(x float64) float64 {
 	return x * (1 - x)
 }
 
-
 func main() {
+	rand.Seed(time.Now().UnixNano())
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
     if err != nil {
         fmt.Printf("Failed to load OHLC .csv file: %v", err)
@@ -125,12 +126,8 @@ func main() {
 	/*
 		Initializing the NN
 	*/
-	// numExamples := len(data) - 1
-	// hiddenWeights := randomWeights(numIn, numHidden)
-	// hiddenBiases := randomBiases(numHidden)
-	// outputWeights := randomWeghts(numHidden, numOut)
-	// outputBiases := randomBiases(numOut)
 	
+
 	/*// MA Crossover Signals
     shortWindow := 3
     longWindow := 5
