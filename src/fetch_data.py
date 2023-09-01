@@ -27,7 +27,6 @@ def validateTicker(ticker):
 def buildSeriesDataFrame(ticker, data):
     # print(f'JSON Snapshot before building DataFrame:\n{data}\n')
     df = pd.DataFrame(columns=['Ticker','Date','Open','High','Low','Close', 'Volume'])
-
     for k,v in data.items():
         date = dt.datetime.strptime(k, '%Y-%m-%d')
         df.loc[-1,:] = [ticker, date.date(),

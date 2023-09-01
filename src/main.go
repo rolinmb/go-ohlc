@@ -116,16 +116,11 @@ func main() {
         }
         data = append(data, entry) 
     }
-    /* 
-	    ML Feature Detection. Feature detection is the process
-	    of finding desired correct output data (the buy/sell signals) to train our model on
-	*/
+    /* ML Feature Detection; finding desired correct output data (the buy/sell signals) to train our model on */
     for i := 0; i < len(data); i++ {
 		fmt.Printf("%s signal at date: %s\n", data[i].Signal, data[i].Date)
     }
-	/*
-		Initializing the NN
-	*/
+	/* Initializing the NN */
 	
 
 	/*// MA Crossover Signals
