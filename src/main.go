@@ -6,11 +6,24 @@ import (
     "log"
     "os"
     "strconv"
+	"math"
+	"math/rand"
+)
+
+const (
+	learningRate = 0.01
+	numEpochs = 1000
+	numIn = 2
+	numHidden = 5
+	numOut = 1
 )
 
 type SeriesData struct {
     Date string
     Close float64
+	PercentReturn float64
+	PointDelta float64
+	Signal string
 }
 
 func parseFloat(value string) float64 {
@@ -20,6 +33,44 @@ func parseFloat(value string) float64 {
     }
     return result
 }
+
+func randomWeights(rows, cols int) [][]float64 {
+	weights := make([][]float64, rows)
+	for i := range weights {
+		weights[i] = make([]float64, cols)
+		for j := range weights[i] {
+			weights[i][j] = rand.Float64() - 0.5
+		}
+	}
+	return weights
+}
+
+func randomBiases(size int) []float64 {
+	biases := make([]float64, size)
+	for i := range biases {
+		biases[i] = rand.Float64() - 0.5
+	}
+	return biases
+}
+
+func dot(vec []float64, mat [][]float64) []float64 {
+	result := make([]float64, len(mat[0]))
+	for i := range mat[0] {
+		for j := range vec {
+			result[i] += vec[j] * mat[j][i]
+		}
+	}
+	return result
+}
+
+func sigmoid(x float64) float64 {
+	return 1 / (1 + math.Exp(-x))
+}
+
+func sigmoidDerivative(x float64) float64 {
+	return x * (1 - x)
+}
+
 
 func main() {
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
@@ -34,15 +85,52 @@ func main() {
     }
     data := make([]SeriesData, 0, len(records) - 1)
     for i := 1; i < len(records); i++ {
+		closePrice := parseFloat(records[i][5])
+		var nextChange float64
+		var signal string
+		var percent float64
+		var change float64
+		if i > 2 {
+			if i == len(records) - 1 {
+				signal = "? (END OF DATA)"
+			} else {
+				nextClose := parseFloat(records[i+1][5])
+				nextChange = nextClose - closePrice
+				if nextChange >= 0.0 {
+					signal = "1 (Buy)"
+				} else {
+					signal = "0 (Sell)"
+				}
+			}
+			prevClose := parseFloat(records[i-1][5])
+			percent = (closePrice - prevClose) / prevClose
+			change = closePrice - prevClose
+		}
         entry := SeriesData{
             Date: records[i][1],
-            Close: parseFloat(records[i][5]),
+            Close: closePrice,
+			PercentReturn: percent,
+			PointDelta: change,
+			Signal: signal, 
         }
         data = append(data, entry) 
     }
-    /* ML Feature Detection. Feature detection is the process
-	   of finding desired correct output data (the buy/sell signals) to train our model on
+    /* 
+	    ML Feature Detection. Feature detection is the process
+	    of finding desired correct output data (the buy/sell signals) to train our model on
 	*/
+    for i := 0; i < len(data); i++ {
+		fmt.Printf("%s signal at date: %s\n", data[i].Signal, data[i].Date)
+    }
+	/*
+		Initializing the NN
+	*/
+	// numExamples := len(data) - 1
+	// hiddenWeights := randomWeights(numIn, numHidden)
+	// hiddenBiases := randomBiases(numHidden)
+	// outputWeights := randomWeghts(numHidden, numOut)
+	// outputBiases := randomBiases(numOut)
+	
 	/*// MA Crossover Signals
     shortWindow := 3
     longWindow := 5
@@ -75,16 +163,4 @@ func main() {
 	}
 	*/
 	// Signals based on future results
-    currentDate := ""
-    for i := 0; i < len(data) - 1; i++ {
-		nextReturn := (data[i+1].Close - data[i].Close) / data[i].Close
-		var signal string
-		if nextReturn > 0 {
-			signal = "Buy"
-		} else {
-			signal = "Sell"
-		}
-		currentDate = data[i].Date
-		fmt.Printf("%s signal at date: %s\n", signal, currentDate)
-    }
 }
