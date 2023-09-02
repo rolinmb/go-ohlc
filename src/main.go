@@ -9,14 +9,14 @@ import (
 	"math"
 	"math/rand"
 	"time"
-	"os/exec"
+	// "os/exec"
 )
 
 const (
-	learningRate = 0.075
-	numEpochs = 1000
+	learningRate = 0.001
+	numEpochs = 100
 	numIn = 5 // number of input neurons
-	numHidden = 8 // number of hidden neurons
+	numHidden = 10 // number of hidden neurons
 	numOut = 1 // output dimension
 )
 
@@ -48,17 +48,6 @@ func sigmoidDerivative(x float64) float64 {
     return x * (1.0 - x)
 }
 
-func newNN() *NeuralNetwork {
-    rand.Seed(time.Now().UnixNano())
-    nn := &NeuralNetwork{
-        weightsInput: randomWeights(numHidden, numIn),
-        biasesHidden: randomBiases(numHidden),
-        weightsHidden: randomWeights(numOut, numHidden),
-        biasOutput: rand.Float64() - 0.5,
-    }
-    return nn
-}
-
 func randomWeights(rows, cols int) [][]float64 {
     weights := make([][]float64, rows)
     for i := range weights {
@@ -70,12 +59,37 @@ func randomWeights(rows, cols int) [][]float64 {
     return weights
 }
 
+func xavierGlorotWeights(rows, cols int) [][]float64 {
+	weights := make([][]float64, rows)
+	scale := math.Sqrt(1.0 / float64(rows+cols))
+	for i := range weights {
+		weights[i] = make([]float64, cols)
+		for j := range weights[i] {
+			weights[i][j] = rand.Float64() * scale
+		}
+	}
+	return weights
+}
+
 func randomBiases(size int) []float64 {
     biases := make([]float64, size)
     for i := range biases {
         biases[i] = rand.Float64() - 0.5
     }
     return biases
+}
+
+func newNN() *NeuralNetwork {
+    rand.Seed(time.Now().UnixNano())
+    nn := &NeuralNetwork{
+        weightsInput: xavierGlorotWeights(numHidden, numIn),
+		// weightsInput: randomWeights(numHidden, numIn),
+        biasesHidden: randomBiases(numHidden),
+        weightsHidden: xavierGlorotWeights(numOut, numHidden),
+        // weightsHidden: randomWeights(numOut, numHidden),
+		biasOutput: rand.Float64() - 0.5,
+    }
+    return nn
 }
 
 func (nn *NeuralNetwork) forwardHidden(inputs []float64) []float64 {
@@ -165,12 +179,14 @@ func getFeatures(records [][]string) []SeriesData {
 }
 
 func main() {
+	/*
 	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
 	output, err := cmd.Output()
 	if err != nil {
 		fmt.Println("Error returning Python script:", err)
 	}
 	fmt.Println("Python script output:\n"+string(output)+"\t->Loading python output .csv into main.go")
+	*/
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
     if err != nil {
         fmt.Printf("Failed to load OHLC .csv file: %v", err)
@@ -187,8 +203,7 @@ func main() {
     for i := 0; i < len(data); i++ {
 		fmt.Printf("%s signal at date: %s \n\t OHLC: (%f, %f, %f, %f) Day Range: %f, Day Point Delta: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange, data[i].PointDelta)
     }
-	*/
-	/* Initializing the NN and training */
+	*/ /* Initializing the NN and training */
 	nn := newNN()
 	n := len(data)-1
 	for epoch := 0; epoch < numEpochs; epoch++ {
@@ -204,7 +219,6 @@ func main() {
 	testInput := []float64{data[n-1].Close, data[n].Close, data[n].DayRange, data[n].PointDelta, data[n].Signal}
 	testPrediction := nn.forwardOutput(nn.forwardHidden(testInput))
 	fmt.Println("\nNext Trading Day Point Delta Prediction:", testPrediction)
-
 	/*// MA Crossover Signals
     shortWindow := 3
     longWindow := 5
