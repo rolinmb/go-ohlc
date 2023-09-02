@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"time"
+	"os/exec"
 )
 
 const (
@@ -78,6 +79,12 @@ func sigmoidDerivative(x float64) float64 {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println("Error returning Python script:", err)
+	}
+	fmt.Println("Python script output:\n"+string(output)+"\nLoading python output .csv into golang:")
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
     if err != nil {
         fmt.Printf("Failed to load OHLC .csv file: %v", err)
