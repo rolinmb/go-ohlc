@@ -59,11 +59,76 @@ func randomBiases(size int) []float64 {
 	return biases
 }
 
+func transpose(mat [][]float64) [][]float64 {
+    rows, cols := len(mat), len(mat[0])
+    transposed := make([][]float64, cols)
+    for i := 0; i < cols; i++ {
+        transposed[i] = make([]float64, rows)
+        for j := 0; j < rows; j++ {
+            transposed[i][j] = mat[j][i]
+        }
+    }
+    return transposed
+}
+
+func add(a []float64, b []float64) []float64 {
+	if len(a) != len(b) {
+		log.Fatal("add() Mismatched dimensions: slices a and b")
+	}
+	result := make([]float64, len(a))
+	for i := range a {
+		result[i] = a[i] + b[i]
+	}
+	return result
+}
+
+func sub(a []float64, b []float64) []float64 {
+	if len(a) != len(b) {
+		log.Fatal("sub() Mismatched dimensions: slices a and b")
+	}
+	result := make([]float64, len(a))
+	for i := range a {
+		result[i] = a[i] - b[i]
+	}
+	return result
+}
+
+func addWeights(a [][]float64, b [][]float64) [][]float64 {
+    if len(a) != len(b) || len(a[0]) != len(b[0]) {
+        log.Fatal("Mismatched dimensions: weight matrices a and b")
+    }
+    result := make([][]float64, len(a))
+    for i := range a {
+        result[i] = make([]float64, len(a[0]))
+        for j := range a[i] {
+            result[i][j] = a[i][j] + b[i][j]
+        }
+    }
+    return result
+}
+
+func mult(a [][]float64, b [][]float64) [][]float64 {
+	if len(a) != len(b) || len(a[0]) != len(b[0]) {
+		log.Fatal("mutl() Mismatched dimensions: matricies a and b")
+	}
+	result := make([][]float64, len(a))
+	for i := range a {
+		result[i] = make([]float64, len(a[0]))
+		for j := range a[i] {
+			result[i][j] = a[i][j] * b[i][j]
+		}
+	}
+	return result
+}
+
 func dot(vec []float64, mat [][]float64) []float64 {
-	result := make([]float64, len(mat[0]))
-	for i := range mat[0] {
+	if len(vec) != len(mat[0]) {
+		log.Fatal("dot() Mismatched dimensions: vector and matrix")
+	}
+	result := make([]float64, len(mat))
+	for i := range mat {
 		for j := range vec {
-			result[i] += vec[j] * mat[j][i]
+			result[i] += vec[j] * mat[i][j]
 		}
 	}
 	return result
@@ -77,8 +142,78 @@ func sigmoidDerivative(x float64) float64 {
 	return x * (1 - x)
 }
 
-func main() {
+type NeuralNetwork struct {
+	inputSize int
+	hiddenSize int
+	outputSize int
+	weightsInput [][]float64
+	weightsHidden [][]float64
+	biasesHidden []float64
+	biasesOutput []float64
+	activation func(float64) float64
+	derivative func(float64) float64
+}
+
+func newNN(inputSize, hiddenSize, outputSize int) *NeuralNetwork {
 	rand.Seed(time.Now().UnixNano())
+	nn := &NeuralNetwork{
+		inputSize: inputSize,
+		hiddenSize: hiddenSize,
+		outputSize: outputSize,
+		weightsInput: randomWeights(inputSize, hiddenSize),
+		weightsHidden: randomWeights(hiddenSize, outputSize),
+		biasesHidden: randomBiases(hiddenSize),
+		biasesOutput: randomBiases(outputSize),
+		activation: sigmoid,
+		derivative: sigmoidDerivative,
+	}
+	return nn
+}
+
+func applyActivation(layer []float64, biases []float64, activation func(x float64) float64) []float64 {
+	if biases != nil {
+		if len(layer) != len(biases) {
+			log.Fatal("Mismatched dimensions: layer and biases")
+		}
+		for i := range layer {
+			layer[i] += biases[i]
+		}
+	}
+	result := make([]float64, len(layer))
+	for i, val := range layer {
+		result[i] = activation(val)
+	}
+	return result
+}
+
+func (nn *NeuralNetwork) forwardPass(input []float64) []float64 {
+	hiddenLayer := dot(input, nn.weightsInput)
+	hiddenLayer = applyActivation(hiddenLayer, nn.biasesHidden, nn.activation)
+	outputLayer := dot(hiddenLayer, nn.weightsHidden)
+	outputLayer = applyActivation(outputLayer, nn.biasesOutput, nn.activation)
+	return outputLayer
+}
+
+func (nn *NeuralNetwork) train(input []float64, target []float64) {
+	// Forward-Pass
+	hiddenLayer := dot(input, nn.weightsInput)
+	hiddenLayer = applyActivation(hiddenLayer, nn.biasesHidden, nn.activation)
+	outputLayer := dot(hiddenLayer, nn.weightsHidden)
+	outputLayer = applyActivation(outputLayer, nn.biasesOutput, nn.activation)
+	// Backpropagation
+	outputError := sub(target, outputLayer)
+	deltaOutput := mult(outputError, applyActivation(outputLayer, nil, nn.derivative))
+	hiddenError := dot(deltaOutput, transpose(nn.weightsHidden))
+	deltaHidden := mult(hiddenError, applyActivation(hiddenLayer, nil, nn.derivative))
+	// Update weights and biases
+	nn.weightsHidden = addWeights(nn.weightsHidden, outerProduct(hiddenLayer, deltaOutput))
+	nn.biasesOutput = add(nn.biasesOutput, deltaOutput)
+	nn.weightsInput = addWeights(nn.weightsInput, outerProduct(input, deltaHidden))
+	nn.biasesHidden = add(nn.biasesHidden, deltaHidden)
+}
+
+
+func main() {
 	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
 	output, err := cmd.Output()
 	if err != nil {
@@ -133,11 +268,20 @@ func main() {
     }
     /* ML Feature Detection; finding desired correct output data (the buy/sell signals) to train our model on */
     for i := 0; i < len(data); i++ {
-		fmt.Printf("%s signal at date: %s -> OHLC: (%f, %f, %f, %f) -> Day Range: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange)
+		fmt.Printf("%s signal at date: %s \n\t OHLC: (%f, %f, %f, %f) Day Range: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange)
     }
 	/* Initializing the NN */
-	
-
+	nn := newNN(numIn, numHidden, numOut)
+	// input is { data[i].Close, data[i].DayRange}
+	// or {data[i-1].Close, data[i].Close, data[i].DayRange} [limit training window to i := 0; i < len(data)]
+	// target is {data[i+1].PointDelta}
+	input := []float64{0.5, 0.7}
+	target := []float64{0.8}
+	for epoch := 0; epoch < numEpochs; epoch++ {
+		nn.train(input, target)
+	}
+	predictions := nn.forwardPass(input)
+	fmt.Println("Predictions:", predictions)
 	/*// MA Crossover Signals
     shortWindow := 3
     longWindow := 5
