@@ -9,15 +9,15 @@ import (
 	"math"
 	"math/rand"
 	"time"
-	// "os/exec"
+	"os/exec"
 )
 
 const (
-	learningRate = 0.001
-	numEpochs = 100
-	numIn = 5 // number of input neurons
-	numHidden = 10 // number of hidden neurons
+	numEpochs = 100000
+	numIn = 7 // number of input neurons
+	numHidden = 14 // number of hidden neurons (stabilizes with higher number of epochs)
 	numOut = 1 // output dimension
+	window = 4
 )
 
 type SeriesData struct {
@@ -34,10 +34,10 @@ type SeriesData struct {
 
 
 type NeuralNetwork struct {
-    weightsInput  [][]float64
-    biasesHidden  []float64
+    weightsInput [][]float64
+    biasesHidden []float64
     weightsHidden [][]float64
-    biasOutput    float64
+    biasOutput float64
 }
 
 func sigmoid(x float64) float64 {
@@ -112,7 +112,7 @@ func (nn *NeuralNetwork) forwardOutput(hiddenOutputs []float64) float64 {
     return sigmoid(weightedSum)
 }
 
-func (nn *NeuralNetwork) backpropagate(inputs []float64, target float64) {
+func (nn *NeuralNetwork) backpropagate(inputs []float64, target, learningRate float64) {
     hiddenOutputs := nn.forwardHidden(inputs)
     predictedOutput := nn.forwardOutput(hiddenOutputs)
     outputError := target - predictedOutput
@@ -179,14 +179,13 @@ func getFeatures(records [][]string) []SeriesData {
 }
 
 func main() {
-	/*
+	startTime := time.Now()
 	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
 	output, err := cmd.Output()
 	if err != nil {
 		fmt.Println("Error returning Python script:", err)
 	}
-	fmt.Println("Python script output:\n"+string(output)+"\t->Loading python output .csv into main.go")
-	*/
+	fmt.Println("Python script output:\n"+string(output)+"\t-> Loading python output .csv into main.go")
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
     if err != nil {
         fmt.Printf("Failed to load OHLC .csv file: %v", err)
@@ -198,28 +197,40 @@ func main() {
         fmt.Printf("Failed to read OHLC .csv file: %v", err)
     }
 	/* Feature Detection; finding desired correct output data (the buy/sell signals) to train our model on */
+	lastTime := time.Now()
 	data := getFeatures(records)
-	/*
+	preprocessTime := time.Now().Sub(lastTime).Nanoseconds()
+	fmt.Printf("\n* main.go Preprocessing Time: %v nanoseconds (%v seconds)\n", preprocessTime, float64(preprocessTime) / 1e9)
+	
     for i := 0; i < len(data); i++ {
-		fmt.Printf("%s signal at date: %s \n\t OHLC: (%f, %f, %f, %f) Day Range: %f, Day Point Delta: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange, data[i].PointDelta)
+		fmt.Printf("%1.0f signal on %s:\n\t OHLC: ($%.2f, $%.2f, $%.2f, $%.2f) Day Range: $%.2f Day Point Delta: $%.2f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange, data[i].PointDelta)
     }
-	*/ /* Initializing the NN and training */
+	/* Initializing the NN and training */
 	nn := newNN()
-	n := len(data)-1
+	n := len(data) - 1
+	startIndex := n - window
+	learningRate := 1e-15 // 1e-08 and smaller learningRates start to converge to similar values
+	lastTime = time.Now()
 	for epoch := 0; epoch < numEpochs; epoch++ {
-		for i := 1; i < n; i++ {
-			trainingInput := []float64{data[i-1].Close, data[i].Close, data[i].DayRange, data[i].PointDelta, data[i].Signal}
+		for i := startIndex; i < n; i++ {
+			trainingInput := []float64{data[i-1].Close, data[i-1].DayRange, data[i-1].PointDelta, data[i].Close, data[i].DayRange, data[i].PointDelta, data[i].Signal}
 			trainingTarget := data[i+1].PointDelta
-			nn.backpropagate(trainingInput, trainingTarget)
+			nn.backpropagate(trainingInput, trainingTarget, learningRate)
 			// trainingPrediction := nn.forwardOutput(nn.forwardHidden(trainingInput))
 			// fmt.Printf("Training Epoch %d Prediction %d: %f\n", epoch, i, trainingPrediction)
 		}
 	}
+	trainingTime := time.Now().Sub(lastTime).Nanoseconds()
+	fmt.Printf("\n* main.go Training Time: %v nanoseconds (%v seconds)\n", trainingTime, float64(trainingTime) / 1e9)
 	/* Testing after training */
-	testInput := []float64{data[n-1].Close, data[n].Close, data[n].DayRange, data[n].PointDelta, data[n].Signal}
+	testInput := []float64{data[n-1].Close, data[n-1].DayRange, data[n-1].PointDelta, data[n].Close, data[n].DayRange, data[n].PointDelta, data[n].Signal}
 	testPrediction := nn.forwardOutput(nn.forwardHidden(testInput))
-	fmt.Println("\nNext Trading Day Point Delta Prediction:", testPrediction)
-	/*// MA Crossover Signals
+	fmt.Printf("\n[(numEpochs, numHidden, window, learningRate) = (%d, %d, %d, %.e) TEST RESULTS]\n\t-> %s Next Trading Day Point Delta Prediction: $%.5f (%.5f%%)", numEpochs, numHidden, window, learningRate, os.Args[1], testPrediction, (testPrediction / data[n].Close)*100)
+	executionTime := time.Now().Sub(startTime).Nanoseconds()
+	fmt.Printf("\n\n* main.go Total Execution Time: %v nanoseconds (%v seconds)\n", executionTime, float64(executionTime) / 1e9)
+}
+/*
+	// MA Crossover Signals Test
     shortWindow := 3
     longWindow := 5
 	currentSignal := ""
@@ -249,5 +260,4 @@ func main() {
             fmt.Printf("%s signal at date: %s\n", signal, currentDate)
         }
 	}
-	*/
-}
+*/
