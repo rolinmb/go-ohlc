@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	learningRate = 0.01
-	numEpochs = 1000
-	numIn = 2
-	numHidden = 5
-	numOut = 1
+	learningRate = 0.075
+	numEpochs = 100
+	numIn = 4 // number of input neurons
+	numHidden = 8 // number of hidden neurons
+	numOut = 1 // output dimension
 )
 
 type SeriesData struct {
@@ -32,6 +32,90 @@ type SeriesData struct {
 	Signal string
 }
 
+
+type NeuralNetwork struct {
+    weightsInput  [][]float64
+    biasesHidden  []float64
+    weightsHidden [][]float64
+    biasOutput    float64
+}
+
+func sigmoid(x float64) float64 {
+    return 1.0 / (1.0 + math.Exp(-x))
+}
+
+func sigmoidDerivative(x float64) float64 {
+    return x * (1.0 - x)
+}
+
+func newNN() *NeuralNetwork {
+    rand.Seed(time.Now().UnixNano())
+    nn := &NeuralNetwork{
+        weightsInput: randomWeights(numHidden, numIn),
+        biasesHidden: randomBiases(numHidden),
+        weightsHidden: randomWeights(numOut, numHidden),
+        biasOutput: rand.Float64() - 0.5,
+    }
+    return nn
+}
+
+func randomWeights(rows, cols int) [][]float64 {
+    weights := make([][]float64, rows)
+    for i := range weights {
+        weights[i] = make([]float64, cols)
+        for j := range weights[i] {
+            weights[i][j] = rand.Float64() - 0.5
+        }
+    }
+    return weights
+}
+
+func randomBiases(size int) []float64 {
+    biases := make([]float64, size)
+    for i := range biases {
+        biases[i] = rand.Float64() - 0.5
+    }
+    return biases
+}
+
+func (nn *NeuralNetwork) forwardHidden(inputs []float64) []float64 {
+    hiddenOutputs := make([]float64, numHidden)
+    for i := 0; i < numHidden; i++ {
+        weightedSum := nn.biasesHidden[i]
+        for j := 0; j < numIn; j++ {
+            weightedSum += inputs[j] * nn.weightsInput[i][j]
+        }
+        hiddenOutputs[i] = sigmoid(weightedSum)
+    }
+    return hiddenOutputs
+}
+
+func (nn *NeuralNetwork) forwardOutput(hiddenOutputs []float64) float64 {
+    weightedSum := nn.biasOutput
+    for i := 0; i < numHidden; i++ {
+        weightedSum += hiddenOutputs[i] * nn.weightsHidden[0][i]
+    }
+    return sigmoid(weightedSum)
+}
+
+func (nn *NeuralNetwork) backpropagate(inputs []float64, target float64) {
+    hiddenOutputs := nn.forwardHidden(inputs)
+    predictedOutput := nn.forwardOutput(hiddenOutputs)
+    outputError := target - predictedOutput
+    outputDelta := outputError * sigmoidDerivative(predictedOutput)
+    for i := 0; i < numHidden; i++ {
+        nn.weightsHidden[0][i] += learningRate * outputDelta * hiddenOutputs[i]
+    }
+    nn.biasOutput += learningRate * outputDelta
+    for i := 0; i < numHidden; i++ {
+        hiddenDelta := outputDelta * nn.weightsHidden[0][i] * sigmoidDerivative(hiddenOutputs[i])
+        for j := 0; j < numIn; j++ {
+            nn.weightsInput[i][j] += learningRate * hiddenDelta * inputs[j]
+        }
+        nn.biasesHidden[i] += learningRate * hiddenDelta
+    }
+}
+
 func parseFloat(value string) float64 {
     result, err := strconv.ParseFloat(value, 64)
     if err != nil {
@@ -40,197 +124,8 @@ func parseFloat(value string) float64 {
     return result
 }
 
-func randomWeights(rows, cols int) [][]float64 {
-	weights := make([][]float64, rows)
-	for i := range weights {
-		weights[i] = make([]float64, cols)
-		for j := range weights[i] {
-			weights[i][j] = rand.Float64() - 0.5
-		}
-	}
-	return weights
-}
-
-func randomBiases(size int) []float64 {
-	biases := make([]float64, size)
-	for i := range biases {
-		biases[i] = rand.Float64() - 0.5
-	}
-	return biases
-}
-
-func transpose(mat [][]float64) [][]float64 {
-    rows, cols := len(mat), len(mat[0])
-    transposed := make([][]float64, cols)
-    for i := 0; i < cols; i++ {
-        transposed[i] = make([]float64, rows)
-        for j := 0; j < rows; j++ {
-            transposed[i][j] = mat[j][i]
-        }
-    }
-    return transposed
-}
-
-func add(a []float64, b []float64) []float64 {
-	if len(a) != len(b) {
-		log.Fatal("add() Mismatched dimensions: slices a and b")
-	}
-	result := make([]float64, len(a))
-	for i := range a {
-		result[i] = a[i] + b[i]
-	}
-	return result
-}
-
-func sub(a []float64, b []float64) []float64 {
-	if len(a) != len(b) {
-		log.Fatal("sub() Mismatched dimensions: slices a and b")
-	}
-	result := make([]float64, len(a))
-	for i := range a {
-		result[i] = a[i] - b[i]
-	}
-	return result
-}
-
-func addWeights(a [][]float64, b [][]float64) [][]float64 {
-    if len(a) != len(b) || len(a[0]) != len(b[0]) {
-        log.Fatal("Mismatched dimensions: weight matrices a and b")
-    }
-    result := make([][]float64, len(a))
-    for i := range a {
-        result[i] = make([]float64, len(a[0]))
-        for j := range a[i] {
-            result[i][j] = a[i][j] + b[i][j]
-        }
-    }
-    return result
-}
-
-func mult(a [][]float64, b [][]float64) [][]float64 {
-	if len(a) != len(b) || len(a[0]) != len(b[0]) {
-		log.Fatal("mutl() Mismatched dimensions: matricies a and b")
-	}
-	result := make([][]float64, len(a))
-	for i := range a {
-		result[i] = make([]float64, len(a[0]))
-		for j := range a[i] {
-			result[i][j] = a[i][j] * b[i][j]
-		}
-	}
-	return result
-}
-
-func dot(vec []float64, mat [][]float64) []float64 {
-	if len(vec) != len(mat[0]) {
-		log.Fatal("dot() Mismatched dimensions: vector and matrix")
-	}
-	result := make([]float64, len(mat))
-	for i := range mat {
-		for j := range vec {
-			result[i] += vec[j] * mat[i][j]
-		}
-	}
-	return result
-}
-
-func sigmoid(x float64) float64 {
-	return 1 / (1 + math.Exp(-x))
-}
-
-func sigmoidDerivative(x float64) float64 {
-	return x * (1 - x)
-}
-
-type NeuralNetwork struct {
-	inputSize int
-	hiddenSize int
-	outputSize int
-	weightsInput [][]float64
-	weightsHidden [][]float64
-	biasesHidden []float64
-	biasesOutput []float64
-	activation func(float64) float64
-	derivative func(float64) float64
-}
-
-func newNN(inputSize, hiddenSize, outputSize int) *NeuralNetwork {
-	rand.Seed(time.Now().UnixNano())
-	nn := &NeuralNetwork{
-		inputSize: inputSize,
-		hiddenSize: hiddenSize,
-		outputSize: outputSize,
-		weightsInput: randomWeights(inputSize, hiddenSize),
-		weightsHidden: randomWeights(hiddenSize, outputSize),
-		biasesHidden: randomBiases(hiddenSize),
-		biasesOutput: randomBiases(outputSize),
-		activation: sigmoid,
-		derivative: sigmoidDerivative,
-	}
-	return nn
-}
-
-func applyActivation(layer []float64, biases []float64, activation func(x float64) float64) []float64 {
-	if biases != nil {
-		if len(layer) != len(biases) {
-			log.Fatal("Mismatched dimensions: layer and biases")
-		}
-		for i := range layer {
-			layer[i] += biases[i]
-		}
-	}
-	result := make([]float64, len(layer))
-	for i, val := range layer {
-		result[i] = activation(val)
-	}
-	return result
-}
-
-func (nn *NeuralNetwork) forwardPass(input []float64) []float64 {
-	hiddenLayer := dot(input, nn.weightsInput)
-	hiddenLayer = applyActivation(hiddenLayer, nn.biasesHidden, nn.activation)
-	outputLayer := dot(hiddenLayer, nn.weightsHidden)
-	outputLayer = applyActivation(outputLayer, nn.biasesOutput, nn.activation)
-	return outputLayer
-}
-
-func (nn *NeuralNetwork) train(input []float64, target []float64) {
-	// Forward-Pass
-	hiddenLayer := dot(input, nn.weightsInput)
-	hiddenLayer = applyActivation(hiddenLayer, nn.biasesHidden, nn.activation)
-	outputLayer := dot(hiddenLayer, nn.weightsHidden)
-	outputLayer = applyActivation(outputLayer, nn.biasesOutput, nn.activation)
-	// Backpropagation
-	outputError := sub(target, outputLayer)
-	deltaOutput := mult(outputError, applyActivation(outputLayer, nil, nn.derivative))
-	hiddenError := dot(deltaOutput, transpose(nn.weightsHidden))
-	deltaHidden := mult(hiddenError, applyActivation(hiddenLayer, nil, nn.derivative))
-	// Update weights and biases
-	nn.weightsHidden = addWeights(nn.weightsHidden, outerProduct(hiddenLayer, deltaOutput))
-	nn.biasesOutput = add(nn.biasesOutput, deltaOutput)
-	nn.weightsInput = addWeights(nn.weightsInput, outerProduct(input, deltaHidden))
-	nn.biasesHidden = add(nn.biasesHidden, deltaHidden)
-}
-
-
-func main() {
-	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
-	output, err := cmd.Output()
-	if err != nil {
-		fmt.Println("Error returning Python script:", err)
-	}
-	fmt.Println("Python script output:\n"+string(output)+"\nLoading python output .csv into golang:")
-    file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
-    if err != nil {
-        fmt.Printf("Failed to load OHLC .csv file: %v", err)
-    }
-    defer file.Close()
-    reader := csv.NewReader(file)
-    records, err := reader.ReadAll()
-    if err != nil {
-        fmt.Printf("Failed to read OHLC .csv file: %v", err)
-    }
-    data := make([]SeriesData, 0, len(records) - 1)
+func getFeatures(records [][]string) []SeriesData {
+	data := make([]SeriesData, 0, len(records) - 1)
     for i := 1; i < len(records); i++ {
 		closePrice := parseFloat(records[i][5])
 		var nextChange float64
@@ -266,22 +161,47 @@ func main() {
         }
         data = append(data, entry) 
     }
-    /* ML Feature Detection; finding desired correct output data (the buy/sell signals) to train our model on */
-    for i := 0; i < len(data); i++ {
-		fmt.Printf("%s signal at date: %s \n\t OHLC: (%f, %f, %f, %f) Day Range: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange)
-    }
-	/* Initializing the NN */
-	nn := newNN(numIn, numHidden, numOut)
-	// input is { data[i].Close, data[i].DayRange}
-	// or {data[i-1].Close, data[i].Close, data[i].DayRange} [limit training window to i := 0; i < len(data)]
-	// target is {data[i+1].PointDelta}
-	input := []float64{0.5, 0.7}
-	target := []float64{0.8}
-	for epoch := 0; epoch < numEpochs; epoch++ {
-		nn.train(input, target)
+	return data
+}
+
+func main() {
+	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println("Error returning Python script:", err)
 	}
-	predictions := nn.forwardPass(input)
-	fmt.Println("Predictions:", predictions)
+	fmt.Println("Python script output:\n"+string(output)+"\nLoading python output .csv into golang:")
+    file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
+    if err != nil {
+        fmt.Printf("Failed to load OHLC .csv file: %v", err)
+    }
+    defer file.Close()
+    reader := csv.NewReader(file)
+    records, err := reader.ReadAll()
+    if err != nil {
+        fmt.Printf("Failed to read OHLC .csv file: %v", err)
+    }
+	/* Feature Detection; finding desired correct output data (the buy/sell signals) to train our model on */
+	data := getFeatures(records)
+    for i := 0; i < len(data); i++ {
+		fmt.Printf("%s signal at date: %s \n\t OHLC: (%f, %f, %f, %f) Day Range: %f, Day Point Delta: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange, data[i].PointDelta)
+    }
+	/* Initializing the NN and training */
+	nn := newNN()
+	for epoch := 0; epoch < numEpochs; epoch++ {
+		for i := 1; i < len(data) - 1; i++ {
+			trainingInput := []float64{data[i-1].Close, data[i].Close, data[i].DayRange, data[i].PointDelta}
+			trainingTarget := data[i+1].PointDelta
+			nn.backpropagate(trainingInput, trainingTarget)
+			nn.forwardOutput(nn.forwardHidden(trainingInput))
+			// fmt.Printf("Training Epoch %d Prediction %d: %f\n", epoch, i, trainingPrediction)
+		}
+	}
+	/* Testing after training */
+	input := []float64{data[len(data)-2].Close, data[len(data)-1].Close, data[len(data)-1].DayRange, data[len(data)-1].PointDelta}
+	predictions := nn.forwardOutput(nn.forwardHidden(input))
+	fmt.Println("\nPrediction of Next Trading Day Point Delta:", predictions)
+
 	/*// MA Crossover Signals
     shortWindow := 3
     longWindow := 5
@@ -313,5 +233,4 @@ func main() {
         }
 	}
 	*/
-	// Signals based on future results
 }
