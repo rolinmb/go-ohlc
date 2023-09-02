@@ -14,8 +14,8 @@ import (
 
 const (
 	learningRate = 0.075
-	numEpochs = 100
-	numIn = 4 // number of input neurons
+	numEpochs = 1000
+	numIn = 5 // number of input neurons
 	numHidden = 8 // number of hidden neurons
 	numOut = 1 // output dimension
 )
@@ -29,7 +29,7 @@ type SeriesData struct {
 	DayRange float64
 	PercentReturn float64
 	PointDelta float64
-	Signal string
+	Signal float64
 }
 
 
@@ -129,19 +129,19 @@ func getFeatures(records [][]string) []SeriesData {
     for i := 1; i < len(records); i++ {
 		closePrice := parseFloat(records[i][5])
 		var nextChange float64
-		var signal string
+		var signal float64
 		var percent float64
 		var change float64
 		if i > 2 {
 			if i == len(records) - 1 {
-				signal = "? (END OF DATA)"
+				signal = -1.0
 			} else {
 				nextClose := parseFloat(records[i+1][5])
 				nextChange = nextClose - closePrice
 				if nextChange >= 0.0 {
-					signal = "1 (Buy)"
+					signal = 1.0
 				} else {
-					signal = "0 (Sell)"
+					signal = 0.0
 				}
 			}
 			prevClose := parseFloat(records[i-1][5])
@@ -170,7 +170,7 @@ func main() {
 	if err != nil {
 		fmt.Println("Error returning Python script:", err)
 	}
-	fmt.Println("Python script output:\n"+string(output)+"\nLoading python output .csv into golang:")
+	fmt.Println("Python script output:\n"+string(output)+"\t->Loading python output .csv into main.go")
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
     if err != nil {
         fmt.Printf("Failed to load OHLC .csv file: %v", err)
@@ -183,24 +183,27 @@ func main() {
     }
 	/* Feature Detection; finding desired correct output data (the buy/sell signals) to train our model on */
 	data := getFeatures(records)
+	/*
     for i := 0; i < len(data); i++ {
 		fmt.Printf("%s signal at date: %s \n\t OHLC: (%f, %f, %f, %f) Day Range: %f, Day Point Delta: %f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange, data[i].PointDelta)
     }
+	*/
 	/* Initializing the NN and training */
 	nn := newNN()
+	n := len(data)-1
 	for epoch := 0; epoch < numEpochs; epoch++ {
-		for i := 1; i < len(data) - 1; i++ {
-			trainingInput := []float64{data[i-1].Close, data[i].Close, data[i].DayRange, data[i].PointDelta}
+		for i := 1; i < n; i++ {
+			trainingInput := []float64{data[i-1].Close, data[i].Close, data[i].DayRange, data[i].PointDelta, data[i].Signal}
 			trainingTarget := data[i+1].PointDelta
 			nn.backpropagate(trainingInput, trainingTarget)
-			nn.forwardOutput(nn.forwardHidden(trainingInput))
+			// trainingPrediction := nn.forwardOutput(nn.forwardHidden(trainingInput))
 			// fmt.Printf("Training Epoch %d Prediction %d: %f\n", epoch, i, trainingPrediction)
 		}
 	}
 	/* Testing after training */
-	input := []float64{data[len(data)-2].Close, data[len(data)-1].Close, data[len(data)-1].DayRange, data[len(data)-1].PointDelta}
-	predictions := nn.forwardOutput(nn.forwardHidden(input))
-	fmt.Println("\nPrediction of Next Trading Day Point Delta:", predictions)
+	testInput := []float64{data[n-1].Close, data[n].Close, data[n].DayRange, data[n].PointDelta, data[n].Signal}
+	testPrediction := nn.forwardOutput(nn.forwardHidden(testInput))
+	fmt.Println("\nNext Trading Day Point Delta Prediction:", testPrediction)
 
 	/*// MA Crossover Signals
     shortWindow := 3
