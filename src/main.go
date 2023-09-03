@@ -9,15 +9,13 @@ import (
 	"math"
 	"math/rand"
 	"time"
-	"os/exec"
+	// "os/exec"
 )
 
 const (
-	numEpochs = 100000
-	numIn = 7 // number of input neurons
-	numHidden = 14 // number of hidden neurons (stabilizes with higher number of epochs)
+	numEpochs = 500
+	numIn = 8 // number of input neurons
 	numOut = 1 // output dimension
-	window = 4
 )
 
 type SeriesData struct {
@@ -34,6 +32,7 @@ type SeriesData struct {
 
 
 type NeuralNetwork struct {
+	numHidden int
     weightsInput [][]float64
     biasesHidden []float64
     weightsHidden [][]float64
@@ -79,13 +78,14 @@ func randomBiases(size int) []float64 {
     return biases
 }
 
-func newNN() *NeuralNetwork {
+func newNN(nHidden int) *NeuralNetwork {
     rand.Seed(time.Now().UnixNano())
     nn := &NeuralNetwork{
-        weightsInput: xavierGlorotWeights(numHidden, numIn),
+		numHidden: nHidden,
+        weightsInput: xavierGlorotWeights(nHidden, numIn),
 		// weightsInput: randomWeights(numHidden, numIn),
-        biasesHidden: randomBiases(numHidden),
-        weightsHidden: xavierGlorotWeights(numOut, numHidden),
+        biasesHidden: randomBiases(nHidden),
+        weightsHidden: xavierGlorotWeights(numOut, nHidden),
         // weightsHidden: randomWeights(numOut, numHidden),
 		biasOutput: rand.Float64() - 0.5,
     }
@@ -93,8 +93,8 @@ func newNN() *NeuralNetwork {
 }
 
 func (nn *NeuralNetwork) forwardHidden(inputs []float64) []float64 {
-    hiddenOutputs := make([]float64, numHidden)
-    for i := 0; i < numHidden; i++ {
+    hiddenOutputs := make([]float64, nn.numHidden)
+    for i := 0; i < nn.numHidden; i++ {
         weightedSum := nn.biasesHidden[i]
         for j := 0; j < numIn; j++ {
             weightedSum += inputs[j] * nn.weightsInput[i][j]
@@ -106,7 +106,7 @@ func (nn *NeuralNetwork) forwardHidden(inputs []float64) []float64 {
 
 func (nn *NeuralNetwork) forwardOutput(hiddenOutputs []float64) float64 {
     weightedSum := nn.biasOutput
-    for i := 0; i < numHidden; i++ {
+    for i := 0; i < nn.numHidden; i++ {
         weightedSum += hiddenOutputs[i] * nn.weightsHidden[0][i]
     }
     return sigmoid(weightedSum)
@@ -117,11 +117,11 @@ func (nn *NeuralNetwork) backpropagate(inputs []float64, target, learningRate fl
     predictedOutput := nn.forwardOutput(hiddenOutputs)
     outputError := target - predictedOutput
     outputDelta := outputError * sigmoidDerivative(predictedOutput)
-    for i := 0; i < numHidden; i++ {
+    for i := 0; i < nn.numHidden; i++ {
         nn.weightsHidden[0][i] += learningRate * outputDelta * hiddenOutputs[i]
     }
     nn.biasOutput += learningRate * outputDelta
-    for i := 0; i < numHidden; i++ {
+    for i := 0; i < nn.numHidden; i++ {
         hiddenDelta := outputDelta * nn.weightsHidden[0][i] * sigmoidDerivative(hiddenOutputs[i])
         for j := 0; j < numIn; j++ {
             nn.weightsInput[i][j] += learningRate * hiddenDelta * inputs[j]
@@ -180,12 +180,12 @@ func getFeatures(records [][]string) []SeriesData {
 
 func main() {
 	startTime := time.Now()
-	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
+	/* cmd := exec.Command("python", "fetch_data.py", os.Args[1])
 	output, err := cmd.Output()
 	if err != nil {
 		fmt.Println("Error returning Python script:", err)
 	}
-	fmt.Println("Python script output:\n"+string(output)+"\t-> Loading python output .csv into main.go")
+	fmt.Println("Python script output:\n"+string(output)+"\t-> Loading python output .csv into main.go") */
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
     if err != nil {
         fmt.Printf("Failed to load OHLC .csv file: %v", err)
@@ -200,34 +200,39 @@ func main() {
 	lastTime := time.Now()
 	data := getFeatures(records)
 	preprocessTime := time.Now().Sub(lastTime).Nanoseconds()
-	fmt.Printf("\n* main.go Preprocessing Time: %v nanoseconds (%v seconds)\n", preprocessTime, float64(preprocessTime) / 1e9)
-	
-    for i := 0; i < len(data); i++ {
+	fmt.Printf("\n* <main.go> Preprocessing Time: %v nanoseconds (%v seconds)\n", preprocessTime, float64(preprocessTime) / 1e9)
+    /* for i := 0; i < len(data); i++ {
 		fmt.Printf("%1.0f signal on %s:\n\t OHLC: ($%.2f, $%.2f, $%.2f, $%.2f) Day Range: $%.2f Day Point Delta: $%.2f\n", data[i].Signal, data[i].Date, data[i].Open, data[i].High, data[i].Low, data[i].Close, data[i].DayRange, data[i].PointDelta)
-    }
+    } */
 	/* Initializing the NN and training */
-	nn := newNN()
 	n := len(data) - 1
-	startIndex := n - window
-	learningRate := 1e-15 // 1e-08 and smaller learningRates start to converge to similar values
-	lastTime = time.Now()
-	for epoch := 0; epoch < numEpochs; epoch++ {
-		for i := startIndex; i < n; i++ {
-			trainingInput := []float64{data[i-1].Close, data[i-1].DayRange, data[i-1].PointDelta, data[i].Close, data[i].DayRange, data[i].PointDelta, data[i].Signal}
-			trainingTarget := data[i+1].PointDelta
-			nn.backpropagate(trainingInput, trainingTarget, learningRate)
-			// trainingPrediction := nn.forwardOutput(nn.forwardHidden(trainingInput))
-			// fmt.Printf("Training Epoch %d Prediction %d: %f\n", epoch, i, trainingPrediction)
+	learningRate := 1e-16 // 1e-08 and smaller learningRates start to converge to similar values
+	for window := 2; window < 7; window++ {
+		startIndex := n - window
+		for numHidden := 1; numHidden < 9; numHidden++ {
+			nn := newNN(numHidden)
+			lastTime = time.Now()
+			for epoch := 0; epoch < numEpochs; epoch++ {
+				for i := startIndex; i < n; i++ {
+					trainingInput := []float64{data[i-1].Close, data[i-1].DayRange, data[i-1].PointDelta, data[i-1].PercentReturn, data[i].Close, data[i].DayRange, data[i].PointDelta, data[i].Signal}
+					trainingTarget := data[i+1].PointDelta
+					nn.backpropagate(trainingInput, trainingTarget, learningRate)
+					/* trainingPrediction := nn.forwardOutput(nn.forwardHidden(trainingInput))
+					fmt.Printf("Training Epoch %d Prediction %d: %f\n", epoch, i, trainingPrediction) */
+				}
+			}
+			trainingTime := time.Now().Sub(lastTime).Nanoseconds()
+			fmt.Printf("\n<main.go> (window, numHidden) = (%d, %d) TRAINING TIME: %v nanoseconds (%v seconds)\n", window, numHidden, trainingTime, float64(trainingTime) / 1e9)
+			/* Testing after training */
+			testInput := []float64{data[n-1].Close, data[n-1].DayRange, data[n-1].PointDelta, data[n-1].PercentReturn, data[n].Close, data[n].DayRange, data[n].PointDelta, data[n].Signal}
+			fmt.Printf("  :: (numEpochs, window, numHidden, learningRate) = (%d, %d, %d, %.e) TEST RESULTS", numEpochs, numHidden, window, learningRate)
+			testPrediction := nn.forwardOutput(nn.forwardHidden(testInput))
+			fmt.Printf("\n\t-> %s Next Trading Day Point Delta Prediction: $%.5f (%.5f%%)\n", os.Args[1], testPrediction, (testPrediction / data[n].Close)*100)
 		}
+		fmt.Println("\n------------------------------------------------------------------------------------------------")
 	}
-	trainingTime := time.Now().Sub(lastTime).Nanoseconds()
-	fmt.Printf("\n* main.go Training Time: %v nanoseconds (%v seconds)\n", trainingTime, float64(trainingTime) / 1e9)
-	/* Testing after training */
-	testInput := []float64{data[n-1].Close, data[n-1].DayRange, data[n-1].PointDelta, data[n].Close, data[n].DayRange, data[n].PointDelta, data[n].Signal}
-	testPrediction := nn.forwardOutput(nn.forwardHidden(testInput))
-	fmt.Printf("\n[(numEpochs, numHidden, window, learningRate) = (%d, %d, %d, %.e) TEST RESULTS]\n\t-> %s Next Trading Day Point Delta Prediction: $%.5f (%.5f%%)", numEpochs, numHidden, window, learningRate, os.Args[1], testPrediction, (testPrediction / data[n].Close)*100)
 	executionTime := time.Now().Sub(startTime).Nanoseconds()
-	fmt.Printf("\n\n* main.go Total Execution Time: %v nanoseconds (%v seconds)\n", executionTime, float64(executionTime) / 1e9)
+	fmt.Printf("\n<main.go> Total Execution Time: %v nanoseconds (%v seconds)\n", executionTime, float64(executionTime) / 1e9)
 }
 /*
 	// MA Crossover Signals Test
