@@ -9,7 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"time"
-	// "os/exec"
+	"os/exec"
 )
 
 const (
@@ -230,12 +230,12 @@ func getFeatures(records [][]string) []SeriesData {
 
 func main() {
 	startTime := time.Now()
-	/* cmd := exec.Command("python", "fetch_data.py", os.Args[1])
+	cmd := exec.Command("python", "fetch_data.py", os.Args[1])
 	output, err := cmd.Output()
 	if err != nil {
 		fmt.Println("Error returning Python script:", err)
 	}
-	fmt.Println("Python script output:\n"+string(output)+"\t-> Loading python output .csv into main.go") */
+	fmt.Println("Python script output:\n"+string(output)+"\t-> Loading python output .csv into main.go")
     file, err := os.Open("ohlc_data/"+os.Args[1]+"_tseries.csv")
     if err != nil {
         fmt.Printf("Failed to load OHLC .csv file: %v", err)
